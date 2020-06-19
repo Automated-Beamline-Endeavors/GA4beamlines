@@ -4,6 +4,7 @@ print("Imported!")
 
 import pandas as pd
 import random
+import numpy as np
 
 #################### VARIABLES AND CONSTANTS DEFINITIONS ####################
 #Valid survivor selection methods
@@ -70,12 +71,10 @@ class GA4Beamline:
         self.generation = 0 #NOTE: MAY REMOVE AFTER TALKING WITH MAX DUE TO DUPS
 
     def CreatePop(self, nPop, motors):
-        #NOTE: I WILL FINISH THIS LATER
-        population = pd.DataFrame()
+        #NOTE: still need to see if population is set up correctly
+        population = pd.DataFrame({"motor": motors, "fitness": np.zeros(len(motors)), "ranking": np.zeros(len(motors)), "probability": np.zeros(len(motors))})
 
-        for i in range(nPop):
-            for m in motors:
-                pass
+        #print(population)
 
         return population
 
@@ -154,6 +153,74 @@ class GA4Beamline:
         #self.children ==[self.mutation(child, self.motors, self.mMode["name"]) for child in self.children]
 
         pass
+
+    def Mutation(self, child, motors, mode):
+        #NOTE: WILL FINISH LATER
+
+        mutatedValue = []
+
+        for i, gene in enumerate(child["HOWEVER WE'RE REFERRING TO MOTORS"]):
+            if mode == "nonuniform":
+                mutatedValue.append("random pick from gaussian centered on gene.value, with stdev of motor[j]['sigma']")
+                # to ensure that we are within the limits of the motor scipy.stats has a function truncnorm that should be
+                #   useful here so that we don’t have a pileup at the edges
+            elif mode == "uniform":
+                mutatedValue.append("random pick from uniform distribution with range of motor")
+
+        return mutatedValue
+
+    def FitnessFunc(self, population):
+        #NOTE: WILL FINISH LATER
+
+        if self.fitness["type"] == "epics":
+            pass
+            '''
+            will implement code later but it would look like the following:
+
+            for p in population: # does for loop create unattached copy of range values?
+                move motors to p[motor] values
+                if not OM:
+                    wait for motor move to complete
+                else:# implement Observer mode
+
+                 p[‘fitness’] = read fitness[‘pv’]
+            '''
+        else:
+            #p["fitness"] = fitness["name"](motor values for individual)
+            pass
+
+        #returns population but with the fitness values filled in
+
+    def RankPop(self, probMode):
+        #NOTE: WILL FINISH LATER
+
+        #Set the ranking column of the self.population dataframe (1 being the highest for descending = True)
+        pass
+
+    def CalcProb(self, probMode):
+        #NOTE: WILL FINISH LATER
+
+        #Set the probability column in the self.population dataframe
+        if probMode == "rank":
+            #Loop through population and set probability using RankingProb
+            pass
+        elif probMode == "fitness":
+            #Get sum of Fitness
+            #Loop through population and set probability column to individual fitness/cumulative fitness
+            pass
+
+    def RankingProb(self, rank, nPop, s):
+        #NOTE: WILL FINISH LATER
+        return (2 - s) / nPop + 2 * rank * (s - 1) / nPop / (nPop - 1)
+
+    def Measure(self, childrenOnly = True):
+        #NOTE: WILL FINISH LATER
+
+        #SINCE FITNESSFUNC IS SUPPOSED TO RETURN A MODIFIED POPULATION, I SHOULD PROBABLY SET SOMETHING EQUAL TO THESE
+        if childrenOnly:
+            self.FitnessFunc(self.children)
+        else:
+            self.FitnessFunc(self.population)
 
     #################### HELPER FUNCTIONS ####################
 
