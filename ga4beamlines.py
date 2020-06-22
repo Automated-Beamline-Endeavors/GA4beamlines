@@ -5,6 +5,7 @@ print("Imported!")
 import pandas as pd
 import random
 import numpy as np
+import ackley
 
 #################### VARIABLES AND CONSTANTS DEFINITIONS ####################
 #Valid survivor selection methods
@@ -21,6 +22,8 @@ cxMode =    [{"name": "single", "alpha": 0.5},
 mMode =     [{"name": "uniform"},
              {"name": "gaussian"},
              {"name": "cauchy"}]
+
+fMode =     [{"type": "Func", "name": ackley.AckleyFunc}]
 
 #################### CLASS DEFINITIONS ####################
 ########## ERROR CLASSES ##########
@@ -54,7 +57,7 @@ class GA4Beamline:
         '''
 
         self.motors = motors
-        self.generation = 1
+        self.generation = 0
         self.sSel = self._VerifySurvivorMode(survivorMode)
         self.pSel = self._VerifyParentMode(parentMode)
         self.cxMode = self._VerifyCXMode(cxMode)
@@ -62,28 +65,43 @@ class GA4Beamline:
         self.obsMode = OM
         self.fitness = fitness
 
+        self.nPop = nPop
+
         if initPop == None:
-            self.population = self.CreatePop(nPop, motors)
+            self.population = self.CreatePop()
 
         self.parents = pd.DataFrame()
         self.children = pd.DataFrame()
         self.fitHistory = pd.DataFrame()
-        self.generation = 0 #NOTE: MAY REMOVE AFTER TALKING WITH MAX DUE TO DUPS
 
-    def CreatePop(self, nPop, motors):
+    def CreatePop(self):
         #NOTE: still need to see if population is set up correctly
-        population = pd.DataFrame({"motor": motors, "fitness": np.zeros(len(motors)), "ranking": np.zeros(len(motors)), "probability": np.zeros(len(motors))})
+        categories = {}
+
+        for motor in self.motors:
+            categories[motor["name"]] = []
+
+            for i in range(self.nPop):
+                categories[motor["name"]].append(random.uniform(motor["lo"], motor["hi"]))
+
+        categories["fitness"] = np.zeros(self.nPop)
+        categories["ranking"] = [0] * self.nPop
+        categories["probability"] = np.zeros(self.nPop)
+
+        population = pd.DataFrame(categories)
 
         #print(population)
 
         return population
 
     def SurvivorSel(self):
-        #NOTE: WILL FINISH LATER
+        #NOTE: WILL FINISH LATER.  Need to verify functionality.
+        tmp = None
+
+        print("In survivor selection!")
 
         #if nElite > 0: get to ranked individuals into new population
         #For remainder just looking for nPop-nElite individuals
-        #if generation == 0, select from population else select from population + children
 
         if self.generation == 0:
             self.generation += 1
@@ -92,9 +110,12 @@ class GA4Beamline:
 
             if self.sSel["name"] == "age":
                 if self.sSel["nElite"] > 0:
-                    pass
-                    #self.population[0:self.sSel["nElite"]] #Copy the nElite fittest members from population into next generation
-                #self.population[self.sSel["nElite"]:] = self.children #Copy the children in for the rest of the population
+                    #NOTE: NEED TO CHANGE SO THAT THE HIGHEST RANKED nELITE INDIVIDUALS GET CARRIED OVER
+                    self.population = self.population.iloc[0:self.sSel["nElite"], :]
+                    print(f"Copied eldest.  public is:\n{self.population}")
+
+                self.population = pd.concat([self.population, self.children])
+                print(f"Combined old and new.  public is:\n{self.population}")
 
             elif self.sSel["name"] == "genitor":
                 #Use rankPop to set rank column of population + children
@@ -106,11 +127,13 @@ class GA4Beamline:
 
         if self.pSel["name"] == "probRank":
             #Use rankPop to set rank column
+            self.RankPop()
             #use calcProb("rank") to set probability column
-            pass
+            self.CalcProb("rank")
+
         elif self.pSel["name"] == "probFit":
             #use calcProb("fitness") to set probability column
-            pass
+            self.CalcProb("fitness")
 
         #With probabilities set, create parent sets (lists of indexes to population?) using stochastic universal sampling (fig. 5.2 from Eiben & Smith 2 ed)
         #List of parents should have nPop - nElite parents
@@ -169,8 +192,9 @@ class GA4Beamline:
 
         return mutatedValue
 
-    def FitnessFunc(self, population):
+    def FitnessFunc(self):
         #NOTE: WILL FINISH LATER
+        tmpFit = []
 
         if self.fitness["type"] == "epics":
             pass
@@ -185,32 +209,49 @@ class GA4Beamline:
 
                  p[‘fitness’] = read fitness[‘pv’]
             '''
-        else:
-            #p["fitness"] = fitness["name"](motor values for individual)
-            pass
+        elif self.fitness["type"] == "Func":
+            for row in self.population.index:
+                tmpFit.append(self.fitness["name"](self.population.loc[row,:].tolist()))
+
+            #print(f"tmpFit is:\n{tmpFit}")
+            self.population["fitness"] = tmpFit
+            #print(f"\npopulation is:\n{self.population}")
 
         #returns population but with the fitness values filled in
 
-    def RankPop(self, probMode):
+    def RankPop(self, decending = True):
         #NOTE: WILL FINISH LATER
 
         #Set the ranking column of the self.population dataframe (1 being the highest for descending = True)
-        pass
+        self.population = self.population.sort_values(by = ["fitness"], ascending = not decending)
+        self.population["ranking"] = [i for i in range(1, len(self.population.index) + 1)]
+        #print(self.population)
 
     def CalcProb(self, probMode):
-        #NOTE: WILL FINISH LATER
+        #NOTE: WILL FINISH LATER.  Need to implement "rank"
+        probs = []
 
         #Set the probability column in the self.population dataframe
         if probMode == "rank":
             #Loop through population and set probability using RankingProb
-            pass
+            for row in self.population.index:
+                probs.append(self.RankingProb(self.population.loc[row, "ranking"], self.nPop, self.pSel['s']))
+
         elif probMode == "fitness":
             #Get sum of Fitness
+            cmltFitness = self.population["fitness"].sum()
             #Loop through population and set probability column to individual fitness/cumulative fitness
-            pass
+            for row in self.population.index:
+                probs.append(self.population.loc[row, "fitness"] / cmltFitness)
+
+        #print(probs)
+
+        self.population["probability"] = probs
+        #print(self.population)
+
 
     def RankingProb(self, rank, nPop, s):
-        #NOTE: WILL FINISH LATER
+        #NOTE: Need to verify functionality.
         return (2 - s) / nPop + 2 * rank * (s - 1) / nPop / (nPop - 1)
 
     def Measure(self, childrenOnly = True):
@@ -270,9 +311,12 @@ class GA4Beamline:
 
                 #NOT SURE IF THERE SHOULD BE ANY CHECKS ON THE VALUE OF "S" OR WHAT SHOULD HAPPEN IF IT ISN'T DEFINED
                 if "s" in parentMode:
-                    tmpDict["s"] = parentMode['s']
+                    if 1.0 <= parentMode['s'] and parentMode['s'] <= 2.0:
+                        tmpDict['s'] = parentMode['s']
+                    else:
+                        raise ValueError(f"{parentMode['s']} is not a valid 's' value")
                 else:
-                    tmpDict["s"] = dictn["s"]
+                    tmpDict['s'] = dictn['s']
 
                 break
 
@@ -301,8 +345,7 @@ class GA4Beamline:
                     if 0.0 <= childMode["alpha"] and childMode["alpha"] <= 1.0:
                         tmpDict["alpha"] = childMode['alpha']
                     else:
-                        #NOT SURE WHAT SHOULD HAPPEN IN THE EVENT OF AN INVALID ALPHA VALUE
-                        pass
+                        raise ValueError(f"{childMode['alpha']} is not a valid 'alpha' value.")
                 else:
                     tmpDict["alpha"] = dictn["alpha"]
 
