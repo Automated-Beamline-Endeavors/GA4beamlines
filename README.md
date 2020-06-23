@@ -52,5 +52,7 @@ In genetic algorithms, a population of solutions to a problem are evolved in ord
 
 ## References
 [1] Eiben, A.E. and Smith, J.E. Introduction to Evolutionary Computing, 2nd ed Springer (2015)
+
 [2] Xi, S., Borgna, L. S. & Du, Y.  General method for automatic on-line beamline optimization based on genetic algorithm J. Synchrotron Rad. 22, 661–665 (2015)
+
 [3] Borland, M., Sajaev  V., Emery L., Xiao A. Direct methods of optimization of storage ring dynamic and momentum aperture Proceedings of PAC09, Vancouver, BC, Canada 3850-2 (2009)
