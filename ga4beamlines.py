@@ -70,9 +70,13 @@ class GA4Beamline:
         if initPop == None:
             self.population = self.CreatePop()
 
-        self.parents = pd.DataFrame()
-        self.children = pd.DataFrame()
-        self.fitHistory = pd.DataFrame()
+        #self.parents = pd.DataFrame()
+        self.parents = []
+        self.children = pd.DataFrame(self._MakeDataFrameCat())
+        self.fitHistory = pd.DataFrame(self._MakeDataFrameCat())
+
+        #print(f"children is:\n{self.children}\n")
+        #print(f"fitHistory is:\n{self.fitHistory}\n")
 
     def CreatePop(self):
         #NOTE: still need to see if population is set up correctly
@@ -115,19 +119,24 @@ class GA4Beamline:
                     print(f"Copied eldest.  public is:\n{self.population}")
 
                 self.population = pd.concat([self.population, self.children])
+                #self.RankPop()
                 print(f"Combined old and new.  public is:\n{self.population}")
 
             elif self.sSel["name"] == "genitor":
+                self.population = pd.concat([self.population, self.children])
+
                 #Use rankPop to set rank column of population + children
+                self.RankPop()
                 #self.population = top nPop of population + children
-                pass
+                self.population = self.population.iloc[0:self.nPop, :]
 
     def ParentSel(self):
-        #NOTE: I WILL FINISH LATER
+        #NOTE: Need to verify functionality
+
+        self.RankPop()
 
         if self.pSel["name"] == "probRank":
             #Use rankPop to set rank column
-            self.RankPop()
             #use calcProb("rank") to set probability column
             self.CalcProb("rank")
 
@@ -136,38 +145,117 @@ class GA4Beamline:
             self.CalcProb("fitness")
 
         #With probabilities set, create parent sets (lists of indexes to population?) using stochastic universal sampling (fig. 5.2 from Eiben & Smith 2 ed)
+        self.parents = self.StochasticUnivSampling(numParents = self.nPop - self.sSel["nElite"])
         #List of parents should have nPop - nElite parents
         #Set self.parents/returns parents
 
+    def StochasticUnivSampling(self, numParents):
+        print("\nInside StochasticUnivSampling\n")
+
+        cmlProb = self.population["probability"].cumsum().tolist()
+        parents = []
+
+        #print(cmlProb)
+
+        currMember = i = 1
+        r = random.uniform(0, 1 / numParents)
+
+        #print(f"r is: {r}")
+
+        while currMember <= numParents:
+            while r <= cmlProb[i]:
+                parents.append(i)
+                r += 1 / numParents
+                currMember += 1
+
+            i += 1
+
+        print(f"The parents are:\n{parents}")
+        return parents
+
+
     def Recombine(self):
-        #NOTE: WILL FINISH LATER
+        #NOTE: Need to verify functionality.  ALSO, NEED TO ADJUST HOW MANY CHILDREN ARE GENERATED
 
         #Need to create pairs of individuals from self.parents
-        self.children = [self.Recombination(p, self.cxMode) for p in pairs]
+        pairs = self.CreatePairs(self.parents)
+
+        '''
+        for p in range(len(pairs)):
+            self.children.iloc[p:p + 2, :] = self.Recombination(pairs[p], self.cxMode)
+        '''
+        for p in range(len(pairs)):
+            self.children = pd.concat([self.children, self.Recombination(pairs[p], self.cxMode)], ignore_index = True)
+            #print([self.children, self.Recombination(pairs[p], self.cxMode)])
+        print(f"\nchildren is:\n{self.children}")
+
+    def CreatePairs(self, parents):
+        print("\nIn CreatePairs\n")
+        pairs = []
+
+        for i in range(len(parents)):
+            pairs.append(random.choices(parents, k = 2))
+
+        print(f"The pairs are:\n{pairs}")
+
+        return pairs
 
     def Recombination(self, parents, mode):
-        #NOTE: WILL FINISH LATER
+        #NOTE: Need to verify functionality
+        #print("\nInside Recombination\n")
+        #print(f"mode is:{mode}")
 
         #Create 2 children from pair of parents
         alpha = mode["alpha"]
+        parent1 = self.population.iloc[parents[0], :].tolist()
+        parent2 = self.population.iloc[parents[1], :].tolist()
+        child1 = None
+        child2 = None
 
-        '''Since I'm not sure about how parents is going to be set up, not sure if this will work.
-        if mode["name"] == "Single":
-            #pick a random allele (k)
-            child1 = concat(parents[0][0:k - 1], parents[0][k] * (1 - alpha) + parents[1][k] * alpha, parents[0][k + 1:])
-            child1 = concat(parents[1][0:k - 1], parents[1][k] * (1 - alpha) + parents[0][k] * alpha, parents[1][k + 1:])
+        #print(f"parent1 is: {parent1}\nparent2 is: {parent2}\n")
 
-        elif mode["name"] == "Simple":
-            #pick a random allele (k)
-            child1 = concat(parents[0][0:k - 1], parents[0][k:] * (1 - alpha) + parents[1][k:] * alpha)
-            child1 = concat(parents[1][0:k - 1], parents[1][k:] * (1 - alpha) + parents[0][k:] * alpha)
+        #pick a random allele (k)
+        #NOTE: DOING THIS SINCE THE MOTORS ARE THE FIRST COLUMNS IN THE POPULATION DATATABLE.  IF THIS IS CHANGED,
+        #       THEN THE METHOD TO GENERATE K NEEDS TO CHANGE.
+        k = int(random.choice(range(len(self.motors))))
+        #print(f"k is: {k}")
 
-        elif mode["name"] == "Whole":
-            child1 = parents[0] * (1 - alpha) + parents[1] * alpha
-            child2 = parents[1] * (1 - alpha) + parents[0] * alpha
+        if mode["name"] == "single":
+            child1 = parent1[0:k]
+            child1.append(parent1[k] * (1.0 - alpha) + parent2[k] * alpha)
+            child1 = child1 + parent1[k + 1:]
 
-        return child1, child2
-        '''
+            child2 = parent2[0:k]
+            child2.append(parent2[k] * (1.0 - alpha) + parent1[k] * alpha)
+            child2 = child2 + parent2[k + 1:]
+
+        elif mode["name"] == "simple":
+            child1 = parent1[0:k]
+            child1 = child1 + np.add(np.multiply(parent1[k:], 1 - alpha), np.multiply(parent2[k:], alpha)).tolist()
+
+            child2 = parent2[0:k]
+            child2 = child2 + np.add(np.multiply(parent2[k:], 1 - alpha), np.multiply(parent1[k:], alpha)).tolist()
+
+        elif mode["name"] == "whole":
+            child1 = np.add(np.multiply(parent1, 1 - alpha), np.multiply(parent2, alpha)).tolist()
+
+            child2 = np.add(np.multiply(parent2, 1 - alpha), np.multiply(parent1, alpha)).tolist()
+
+        #print(child1)
+
+        tmp = self._MakeDataFrameCat()
+        i = 0
+
+        for column in tmp:
+            tmp[column].append(child1[i])
+            tmp[column].append(child2[i])
+            i += 1
+
+        tmp = pd.DataFrame(tmp)
+        #print(f"\ntmp is:\n{tmp}")
+
+        return tmp
+
 
     def Mutate(self):
         #NOTE: WILL FINISH LATER
@@ -192,7 +280,7 @@ class GA4Beamline:
 
         return mutatedValue
 
-    def FitnessFunc(self):
+    def FitnessFunc(self, pop):
         #NOTE: WILL FINISH LATER
         tmpFit = []
 
@@ -210,21 +298,22 @@ class GA4Beamline:
                  p[‘fitness’] = read fitness[‘pv’]
             '''
         elif self.fitness["type"] == "Func":
-            for row in self.population.index:
-                tmpFit.append(self.fitness["name"](self.population.loc[row,:].tolist()))
+            for row in pop.index:
+                tmpFit.append(self.fitness["name"](pop.loc[row,:].tolist()))
 
             #print(f"tmpFit is:\n{tmpFit}")
-            self.population["fitness"] = tmpFit
+            pop["fitness"] = tmpFit
             #print(f"\npopulation is:\n{self.population}")
 
         #returns population but with the fitness values filled in
 
-    def RankPop(self, decending = True):
-        #NOTE: WILL FINISH LATER
+    def RankPop(self):
+        #NOTE: Need to verify functionality
 
         #Set the ranking column of the self.population dataframe (1 being the highest for descending = True)
-        self.population = self.population.sort_values(by = ["fitness"], ascending = not decending)
-        self.population["ranking"] = [i for i in range(1, len(self.population.index) + 1)]
+        self.population = self.population.sort_values(by = ["fitness"], ascending = False)
+        self.population["ranking"] = [i for i in range(len(self.population.index) - 1, -1, -1)]
+        self.population.index = [i for i in range(len(self.population.index))]
         #print(self.population)
 
     def CalcProb(self, probMode):
@@ -244,7 +333,7 @@ class GA4Beamline:
             for row in self.population.index:
                 probs.append(self.population.loc[row, "fitness"] / cmltFitness)
 
-        #print(probs)
+        #print(f"probs sum is: {np.sum(probs)}")
 
         self.population["probability"] = probs
         #print(self.population)
@@ -255,7 +344,7 @@ class GA4Beamline:
         return (2 - s) / nPop + 2 * rank * (s - 1) / nPop / (nPop - 1)
 
     def Measure(self, childrenOnly = True):
-        #NOTE: WILL FINISH LATER
+        #NOTE: Need to verify functionality
 
         #SINCE FITNESSFUNC IS SUPPOSED TO RETURN A MODIFIED POPULATION, I SHOULD PROBABLY SET SOMETHING EQUAL TO THESE
         if childrenOnly:
@@ -311,7 +400,7 @@ class GA4Beamline:
 
                 #NOT SURE IF THERE SHOULD BE ANY CHECKS ON THE VALUE OF "S" OR WHAT SHOULD HAPPEN IF IT ISN'T DEFINED
                 if "s" in parentMode:
-                    if 1.0 <= parentMode['s'] and parentMode['s'] <= 2.0:
+                    if 1.0 < parentMode['s'] and parentMode['s'] <= 2.0:
                         tmpDict['s'] = parentMode['s']
                     else:
                         raise ValueError(f"{parentMode['s']} is not a valid 's' value")
@@ -378,3 +467,17 @@ class GA4Beamline:
             raise MethodError(message = f"{mutationMode['name']} is not a valid method for Mutation.")
 
         return tmpDict
+
+    def _MakeDataFrameCat(self):
+        categories = {}
+
+        for motor in self.motors:
+            categories[motor["name"]] = []
+
+        categories["fitness"] = []
+        categories["ranking"] = []
+        categories["probability"] = []
+
+        #tmp = pd.DataFrame(categories)
+
+        return categories
