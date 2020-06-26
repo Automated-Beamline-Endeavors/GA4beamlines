@@ -68,18 +68,21 @@ class GA4Beamline:
         self.nPop = nPop
 
         if initPop == None:
-            self.population = self.CreatePop()
+            self.population = self._CreatePop()
+        else:
+            #Assign provided population.
+            pass
 
         #self.parents = pd.DataFrame()
         self.parents = []
         self.children = pd.DataFrame(self._MakeDataFrameCat())
-        self.fitHistory = pd.DataFrame(self._MakeDataFrameCat())
+        # will hold aveFitness, peakFitness, peakParameters for each generation
+        self.fitHistory = pd.DataFrame({"aveFitness": [], "peakFitness": [], "peakParameters": []})
 
         #print(f"children is:\n{self.children}\n")
         #print(f"fitHistory is:\n{self.fitHistory}\n")
 
-    def CreatePop(self):
-        #NOTE: still need to see if population is set up correctly
+    def _CreatePop(self):
         categories = {}
 
         for motor in self.motors:
@@ -98,11 +101,24 @@ class GA4Beamline:
 
         return population
 
-    def SurvivorSel(self):
+    def FirstGeneration(self):
+        self._Measure(childrenOnly = False)
+        self._SurvivorSel()
+
+    def NextGeneration(self):
+        self._ParentSel()
+        self._Recombine()
+        self._Mutate()
+        self._Measure()
+        self._SurvivorSel()
+
+#################### STAGES FUNCTIONS ####################
+
+    def _SurvivorSel(self):
         #NOTE: WILL FINISH LATER.  Need to verify functionality.
         tmp = None
 
-        print("In survivor selection!")
+        #print("In survivor selection!")
 
         #if nElite > 0: get to ranked individuals into new population
         #For remainder just looking for nPop-nElite individuals
@@ -114,93 +130,103 @@ class GA4Beamline:
 
             if self.sSel["name"] == "age":
                 if self.sSel["nElite"] > 0:
-                    #NOTE: NEED TO CHANGE SO THAT THE HIGHEST RANKED nELITE INDIVIDUALS GET CARRIED OVER
                     self.population = self.population.iloc[0:self.sSel["nElite"], :]
-                    print(f"Copied eldest.  public is:\n{self.population}")
+                    #print(f"Copied elite.  public is:\n{self.population}")
 
-                self.population = pd.concat([self.population, self.children])
-                #self.RankPop()
-                print(f"Combined old and new.  public is:\n{self.population}")
+                    self.population = pd.concat([self.population, self.children.iloc[:(self.nPop - self.sSel["nElite"]), :]], ignore_index = True)
+                    #print(f"Combined old and new.  public is:\n{self.population}")
+                else:
+                    self.population = self.children
 
             elif self.sSel["name"] == "genitor":
-                self.population = pd.concat([self.population, self.children])
+                self.population = pd.concat([self.population, self.children], ignore_index = True)
 
                 #Use rankPop to set rank column of population + children
-                self.RankPop()
+                self._RankPop()
                 #self.population = top nPop of population + children
                 self.population = self.population.iloc[0:self.nPop, :]
 
-    def ParentSel(self):
+        #Set fitHistory
+        # will hold aveFitness, peakFitness, peakParameters for each generation
+        tmp = pd.DataFrame({"aveFitness": [self.population["fitness"].mean()],
+                            "peakFitness": [self.population["fitness"].max()],
+                            "peakParameters": [0]}) #NOTE: NOT SURE WHAT IS SUPPOSED TO BE CONTAINED HERE
+        self.fitHistory = pd.concat([self.fitHistory, tmp], ignore_index = True)
+
+        #print(f"\nLength of population is: {len(self.population.index)}")
+        #print(self.fitHistory)
+
+    def _ParentSel(self):
         #NOTE: Need to verify functionality
 
-        self.RankPop()
+        #Use rankPop to set rank column
+        self._RankPop()
 
         if self.pSel["name"] == "probRank":
-            #Use rankPop to set rank column
             #use calcProb("rank") to set probability column
-            self.CalcProb("rank")
+            self._CalcProb("rank")
 
         elif self.pSel["name"] == "probFit":
             #use calcProb("fitness") to set probability column
-            self.CalcProb("fitness")
+            self._CalcProb("fitness")
 
         #With probabilities set, create parent sets (lists of indexes to population?) using stochastic universal sampling (fig. 5.2 from Eiben & Smith 2 ed)
-        self.parents = self.StochasticUnivSampling(numParents = self.nPop - self.sSel["nElite"])
         #List of parents should have nPop - nElite parents
-        #Set self.parents/returns parents
+        self.parents = self._StochasticUnivSampling(numParents = self.nPop - self.sSel["nElite"])
 
-    def StochasticUnivSampling(self, numParents):
-        print("\nInside StochasticUnivSampling\n")
+        #print(f"nPop is: {self.nPop} Num elite is: {self.sSel['nElite']}")
+        #print(f"parents has a length of: {len(self.parents)} and is:\n{self.parents}")
+
+    def _StochasticUnivSampling(self, numParents):
+        #print("\nInside StochasticUnivSampling\n")
 
         cmlProb = self.population["probability"].cumsum().tolist()
         parents = []
 
         #print(cmlProb)
 
-        currMember = i = 1
+        currMember = i = 0
         r = random.uniform(0, 1 / numParents)
 
         #print(f"r is: {r}")
 
-        while currMember <= numParents:
-            while r <= cmlProb[i]:
+        while currMember < numParents:
+            while r <= cmlProb[i] and currMember < numParents:
                 parents.append(i)
                 r += 1 / numParents
                 currMember += 1
 
             i += 1
 
-        print(f"The parents are:\n{parents}")
+        #print(f"The parents are:\n{parents}")
         return parents
 
 
-    def Recombine(self):
-        #NOTE: Need to verify functionality.  ALSO, NEED TO ADJUST HOW MANY CHILDREN ARE GENERATED
+    def _Recombine(self):
+        #NOTE: Need to verify functionality.
+        self.children = pd.DataFrame(self._MakeDataFrameCat())
+        #print(f"children is:\n{self.children}")
 
         #Need to create pairs of individuals from self.parents
-        pairs = self.CreatePairs(self.parents)
+        pairs = self._CreatePairs(self.parents)
 
-        '''
         for p in range(len(pairs)):
-            self.children.iloc[p:p + 2, :] = self.Recombination(pairs[p], self.cxMode)
-        '''
-        for p in range(len(pairs)):
-            self.children = pd.concat([self.children, self.Recombination(pairs[p], self.cxMode)], ignore_index = True)
+            self.children = pd.concat([self.children, self._Recombination(pairs[p], self.cxMode)], ignore_index = True)
             #print([self.children, self.Recombination(pairs[p], self.cxMode)])
-        print(f"\nchildren is:\n{self.children}")
+        #print(f"\nchildren is:\n{self.children}")
 
-    def CreatePairs(self, parents):
-        print("\nIn CreatePairs\n")
+    def _CreatePairs(self, parents):
+        #print("\nIn CreatePairs\n")
         pairs = []
 
-        for i in range(len(parents)):
+        for i in range(int(np.ceil(len(parents) / 2))):
             pairs.append(random.choices(parents, k = 2))
 
-        print(f"The pairs are:\n{pairs}")
+        #print(f"The pairs are:\n{pairs}")
 
         return pairs
 
-    def Recombination(self, parents, mode):
+    def _Recombination(self, parents, mode):
         #NOTE: Need to verify functionality
         #print("\nInside Recombination\n")
         #print(f"mode is:{mode}")
@@ -257,30 +283,35 @@ class GA4Beamline:
         return tmp
 
 
-    def Mutate(self):
+    def _Mutate(self):
         #NOTE: WILL FINISH LATER
 
-        #NOT SURE IF THIS WILL WORK WITH CHILDREN MEANT TO BE A DATAFRAME.  NEED TO LOOK INTO FURTHER
-        #self.children ==[self.mutation(child, self.motors, self.mMode["name"]) for child in self.children]
+        for row in self.children.index:
+            child = self.children.loc[row, :].tolist()
+            self.children.loc[row, :] = self._Mutation(child, self.motors, self.mMode["name"])
 
-        pass
-
-    def Mutation(self, child, motors, mode):
+    def _Mutation(self, child, motors, mode):
         #NOTE: WILL FINISH LATER
+        #print(f"child is:\n{child}")
 
         mutatedValue = []
 
-        for i, gene in enumerate(child["HOWEVER WE'RE REFERRING TO MOTORS"]):
-            if mode == "nonuniform":
-                mutatedValue.append("random pick from gaussian centered on gene.value, with stdev of motor[j]['sigma']")
+        for i in range(len(motors)):
+            #if mode == "nonuniform":
+            if mode == "gaussian":
+                #mutatedValue.append("random pick from gaussian centered on gene.value, with stdev of motor[j]['sigma']")
+                mutatedValue.append(random.gauss(child[i], motors[i]["sigma"]))
                 # to ensure that we are within the limits of the motor scipy.stats has a function truncnorm that should be
                 #   useful here so that we don’t have a pileup at the edges
             elif mode == "uniform":
-                mutatedValue.append("random pick from uniform distribution with range of motor")
+                mutatedValue.append(random.uniform(motors[i]["lo"], motors[i]["hi"]))
+
+        mutatedValue = mutatedValue + child[len(motors):]
+        #print(f"After mutation, child is:\n{mutatedValue}")
 
         return mutatedValue
 
-    def FitnessFunc(self, pop):
+    def _FitnessFunc(self, pop):
         #NOTE: WILL FINISH LATER
         tmpFit = []
 
@@ -298,16 +329,19 @@ class GA4Beamline:
                  p[‘fitness’] = read fitness[‘pv’]
             '''
         elif self.fitness["type"] == "Func":
-            for row in pop.index:
-                tmpFit.append(self.fitness["name"](pop.loc[row,:].tolist()))
+            for row in range(len(pop.index)):
+                value = pop.iloc[row, :len(self.motors)].tolist()
+                value = self.fitness["name"](value)
+                tmpFit.append(value)
 
             #print(f"tmpFit is:\n{tmpFit}")
             pop["fitness"] = tmpFit
             #print(f"\npopulation is:\n{self.population}")
 
+        #print(pop)
         #returns population but with the fitness values filled in
 
-    def RankPop(self):
+    def _RankPop(self):
         #NOTE: Need to verify functionality
 
         #Set the ranking column of the self.population dataframe (1 being the highest for descending = True)
@@ -316,7 +350,7 @@ class GA4Beamline:
         self.population.index = [i for i in range(len(self.population.index))]
         #print(self.population)
 
-    def CalcProb(self, probMode):
+    def _CalcProb(self, probMode):
         #NOTE: WILL FINISH LATER.  Need to implement "rank"
         probs = []
 
@@ -324,7 +358,7 @@ class GA4Beamline:
         if probMode == "rank":
             #Loop through population and set probability using RankingProb
             for row in self.population.index:
-                probs.append(self.RankingProb(self.population.loc[row, "ranking"], self.nPop, self.pSel['s']))
+                probs.append(self._RankingProb(self.population.loc[row, "ranking"], self.nPop, self.pSel['s']))
 
         elif probMode == "fitness":
             #Get sum of Fitness
@@ -339,20 +373,23 @@ class GA4Beamline:
         #print(self.population)
 
 
-    def RankingProb(self, rank, nPop, s):
+    def _RankingProb(self, rank, nPop, s):
         #NOTE: Need to verify functionality.
         return (2 - s) / nPop + 2 * rank * (s - 1) / nPop / (nPop - 1)
 
-    def Measure(self, childrenOnly = True):
+    def _Measure(self, childrenOnly = True):
         #NOTE: Need to verify functionality
 
         #SINCE FITNESSFUNC IS SUPPOSED TO RETURN A MODIFIED POPULATION, I SHOULD PROBABLY SET SOMETHING EQUAL TO THESE
         if childrenOnly:
-            self.FitnessFunc(self.children)
-        else:
-            self.FitnessFunc(self.population)
+            self._FitnessFunc(self.children)
+            self.children = self.children.sort_values(by = ["fitness"], ascending = False)
+            self.children.index = [i for i in range(len(self.children.index))]
 
-    #################### HELPER FUNCTIONS ####################
+        else:
+            self._FitnessFunc(self.population)
+
+#################### INITIALIZATION HELPER FUNCTIONS ####################
 
     def _VerifySurvivorMode(self, survivorMode):
         '''
