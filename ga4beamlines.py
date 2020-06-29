@@ -38,7 +38,7 @@ class MethodError(BeamlineError):
     def __init__(self, message):
         super().__init__(message)
 
-########## GA CLASSES ##########
+########## GA CLASS ##########
 
 class GA4Beamline:
     def __init__(self, motors, survivorMode, parentMode, cxMode, mutationMode,
@@ -71,7 +71,7 @@ class GA4Beamline:
             self.population = self._CreatePop()
         else:
             #Assign provided population.
-            pass
+            self.population = initPop
 
         #self.parents = pd.DataFrame()
         self.parents = []
@@ -112,10 +112,9 @@ class GA4Beamline:
         self._Measure()
         self._SurvivorSel()
 
-#################### STAGES FUNCTIONS ####################
+    #################### STAGES FUNCTIONS ####################
 
     def _SurvivorSel(self):
-        #NOTE: WILL FINISH LATER.  Need to verify functionality.
         tmp = None
 
         #print("In survivor selection!")
@@ -136,7 +135,8 @@ class GA4Beamline:
                     self.population = pd.concat([self.population, self.children.iloc[:(self.nPop - self.sSel["nElite"]), :]], ignore_index = True)
                     #print(f"Combined old and new.  public is:\n{self.population}")
                 else:
-                    self.population = self.children
+                    #self.population = self.children
+                    self.population = self.children.iloc[:self.nPop, :]
 
             elif self.sSel["name"] == "genitor":
                 self.population = pd.concat([self.population, self.children], ignore_index = True)
@@ -157,8 +157,6 @@ class GA4Beamline:
         #print(self.fitHistory)
 
     def _ParentSel(self):
-        #NOTE: Need to verify functionality
-
         #Use rankPop to set rank column
         self._RankPop()
 
@@ -194,6 +192,7 @@ class GA4Beamline:
             while r <= cmlProb[i] and currMember < numParents:
                 parents.append(i)
                 r += 1 / numParents
+                #print(f"r is: {r}")
                 currMember += 1
 
             i += 1
@@ -203,7 +202,6 @@ class GA4Beamline:
 
 
     def _Recombine(self):
-        #NOTE: Need to verify functionality.
         self.children = pd.DataFrame(self._MakeDataFrameCat())
         #print(f"children is:\n{self.children}")
 
@@ -227,10 +225,6 @@ class GA4Beamline:
         return pairs
 
     def _Recombination(self, parents, mode):
-        #NOTE: Need to verify functionality
-        #print("\nInside Recombination\n")
-        #print(f"mode is:{mode}")
-
         #Create 2 children from pair of parents
         alpha = mode["alpha"]
         parent1 = self.population.iloc[parents[0], :].tolist()
@@ -247,6 +241,7 @@ class GA4Beamline:
         #print(f"k is: {k}")
 
         if mode["name"] == "single":
+            #print(f"Parent1[k] is: {parent1[k]}\nParent2[k] is: {parent2[k]}")
             child1 = parent1[0:k]
             child1.append(parent1[k] * (1.0 - alpha) + parent2[k] * alpha)
             child1 = child1 + parent1[k + 1:]
@@ -256,6 +251,7 @@ class GA4Beamline:
             child2 = child2 + parent2[k + 1:]
 
         elif mode["name"] == "simple":
+            #print(f"Parent1[k:] is: {parent1[k:]}\nParent2[k:] is: {parent2[k:]}")
             child1 = parent1[0:k]
             child1 = child1 + np.add(np.multiply(parent1[k:], 1 - alpha), np.multiply(parent2[k:], alpha)).tolist()
 
@@ -267,7 +263,7 @@ class GA4Beamline:
 
             child2 = np.add(np.multiply(parent2, 1 - alpha), np.multiply(parent1, alpha)).tolist()
 
-        #print(child1)
+        #print(f"{child1}\n\n")
 
         tmp = self._MakeDataFrameCat()
         i = 0
@@ -284,19 +280,17 @@ class GA4Beamline:
 
 
     def _Mutate(self):
-        #NOTE: WILL FINISH LATER
-
         for row in self.children.index:
             child = self.children.loc[row, :].tolist()
             self.children.loc[row, :] = self._Mutation(child, self.motors, self.mMode["name"])
 
     def _Mutation(self, child, motors, mode):
-        #NOTE: WILL FINISH LATER
         #print(f"child is:\n{child}")
 
         mutatedValue = []
 
         for i in range(len(motors)):
+            #print(f"Motor is: {motors[i]['name']}\nRange is: ({motors[i]['lo']}, {motors[i]['hi']})")
             #if mode == "nonuniform":
             if mode == "gaussian":
                 #mutatedValue.append("random pick from gaussian centered on gene.value, with stdev of motor[j]['sigma']")
@@ -305,9 +299,10 @@ class GA4Beamline:
                 #   useful here so that we don’t have a pileup at the edges
             elif mode == "uniform":
                 mutatedValue.append(random.uniform(motors[i]["lo"], motors[i]["hi"]))
+            #print(f"New mutated value is: {mutatedValue[i]}")
 
         mutatedValue = mutatedValue + child[len(motors):]
-        #print(f"After mutation, child is:\n{mutatedValue}")
+        #print(f"After mutation, child is:\n{mutatedValue}\n")
 
         return mutatedValue
 
@@ -363,6 +358,7 @@ class GA4Beamline:
         elif probMode == "fitness":
             #Get sum of Fitness
             cmltFitness = self.population["fitness"].sum()
+            #print(f"cumulative fitness is: {cmltFitness}")
             #Loop through population and set probability column to individual fitness/cumulative fitness
             for row in self.population.index:
                 probs.append(self.population.loc[row, "fitness"] / cmltFitness)
@@ -374,7 +370,6 @@ class GA4Beamline:
 
 
     def _RankingProb(self, rank, nPop, s):
-        #NOTE: Need to verify functionality.
         return (2 - s) / nPop + 2 * rank * (s - 1) / nPop / (nPop - 1)
 
     def _Measure(self, childrenOnly = True):
@@ -389,7 +384,7 @@ class GA4Beamline:
         else:
             self._FitnessFunc(self.population)
 
-#################### INITIALIZATION HELPER FUNCTIONS ####################
+    #################### INITIALIZATION HELPER FUNCTIONS ####################
 
     def _VerifySurvivorMode(self, survivorMode):
         '''
