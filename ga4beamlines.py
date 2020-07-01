@@ -22,7 +22,7 @@ cxMode =    [{"name": "single", "alpha": 0.5},
 mMode =     [{"name": "uniform"},
              {"name": "gaussian"},
              {"name": "cauchy"}]
-
+#
 fMode =     [{"type": "Func", "name": ackley.AckleyFunc}]
 
 #################### CLASS DEFINITIONS ####################
@@ -67,7 +67,7 @@ class GA4Beamline:
 
         self.nPop = nPop
 
-        if initPop == None:
+        if initPop is None:
             self.population = self._CreatePop()
         else:
             #Assign provided population.
@@ -150,7 +150,7 @@ class GA4Beamline:
         # will hold aveFitness, peakFitness, peakParameters for each generation
         tmp = pd.DataFrame({"aveFitness": [self.population["fitness"].mean()],
                             "peakFitness": [self.population["fitness"].max()],
-                            "peakParameters": [0]}) #NOTE: NOT SURE WHAT IS SUPPOSED TO BE CONTAINED HERE
+                            "peakParameters": [self.population.iloc[0, : len(self.motors)].tolist()]}) #NOTE: NOT SURE WHAT IS SUPPOSED TO BE CONTAINED HERE
         self.fitHistory = pd.concat([self.fitHistory, tmp], ignore_index = True)
 
         #print(f"\nLength of population is: {len(self.population.index)}")
