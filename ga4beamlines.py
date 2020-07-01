@@ -6,6 +6,7 @@ import pandas as pd
 import random
 import numpy as np
 import ackley
+from scipy.stats import truncnorm
 
 #################### VARIABLES AND CONSTANTS DEFINITIONS ####################
 #Valid survivor selection methods
@@ -22,7 +23,7 @@ cxMode =    [{"name": "single", "alpha": 0.5},
 mMode =     [{"name": "uniform"},
              {"name": "gaussian"},
              {"name": "cauchy"}]
-#
+#Valid fitness methods
 fMode =     [{"type": "Func", "name": ackley.AckleyFunc}]
 
 #################### CLASS DEFINITIONS ####################
@@ -40,21 +41,80 @@ class MethodError(BeamlineError):
 
 ########## GA CLASS ##########
 
-class GA4Beamline:
+class GA4Beamline():
+    """
+    Attempts to find a satisfactory motor configuration for a beamline using genetic algorithms using specified methods.
+
+    ...
+
+    Parameters
+    ----------
+    motors : list of dict
+        Contains dictionaries for each motor's transformations with their name ('name', PV name for epics motors),
+            upper limit ('hi'), lower limit ('lo'), and sigma ('sigma').
+    survivorMode : dict
+        Specifies the survivor selection method ('name') and parameters ('nElite', optional).  See sMode for valid parameters.
+    parentMode : dict
+        Parent selection method ('name') and parameters ('s', optional).  See pMode for valid parameters.
+    cxMode : dict
+        Recombination method ('name') and parameters (kwargs: 'alpha').  See cxMode for valid parameters.
+    mutationMode : dict
+        Mutation method ('name') and parameters (kwargs: 'Pm');
+            For nonuniform Pm =1; for uniform Pm set to ~0.05 and applied gene-wise.  See mMode for valid parameters.
+    fitness : dict
+        How to measure fitness. 'Type' is either ‘PV’ or ‘Func’ and 'name' is the either the PV or function name to be used.
+            See fMode for valid parameters.
+    nPop : int, optional
+        Number of individuals in the population (Default value is 10).
+    initPop : pandas data frame, optional
+        Initial population; if equal to None, will create one (Default value is None).  Should have a column for each of the
+            motor names in motors as well as a 'fitness', 'rank', and 'probability' column in that order.  Should have an
+            index length equal to nPop.
+    OM : bool, optional
+        Turns on Observer Mode – only set to True when using against epics motors/fitness function (Default value is False).
+
+    Attributes
+    ----------
+    motors : list of dict
+        Stores the value of motors passed in to initialize the class.
+    generation : int
+        Current generation of the population.
+    sSel : dict
+        The method ('name') and parameters ('nElite') to use for survivor selection.
+    pSel : dict
+        The method ('name') and parameters ('s') to use for parent selection.
+    cxMode : dict
+        The method ('name') and parameters ('alpha') to use for recombination.
+    mMode : dict
+        The method ('name') and parameters ('Pm') to use for recombination. #NOTE: NOT SURE ABOUT 'Pm' AS A PARAMETER
+    obsMode : bool
+        Determines whether to use oberver mode (True) or not.  Should use only when using epics motors/fitness function.
+    fitness : dict
+        The type of fitness function to use ('type') and the function name ('name') to use for fitness evaluation.
+    nPop: int
+        The number of individuals in the population each generation.
+    population: pandas data frame
+        Stores the current generation of motor configurations.  Has columns for each motor, overall fitness of individual,
+            the rank of the individual, and the probability of selecting it as a parent.
+    parents : list of indexes
+        The indexes of the individuals in the population to use in child generation.
+    children : pandas data frame
+        Stores the potential next generation of motor configurations.  Has columns for each motor, overall fitness of individual,
+            the rank of the individual, and the probability of selecting it as a parent.
+    fitHistory : pandas data frame
+        Stores the average average fitness, peak fitness, and peak motor configuration for each generation.
+
+    Methods
+    -------
+    FirstGeneration()
+        Finishes setting up and evaluating population and prepares the algorithm for multiple generations.  Must be called before NextGeneration().
+    NextGeneration()
+        Progresses the algorithm forward to the next generation.  Continual iteration (and therefore termination) must be handled externally.
+
+    """
+
     def __init__(self, motors, survivorMode, parentMode, cxMode, mutationMode,
                     fitness, nPop = 10, initPop = None, OM = False):
-        '''
-        # motors        : An array of dictionaries –each motor has upper limit, lower limit, name (PV name for epics motors), sigma
-        # survivorMode  : Survivor selection method (name: Age, progRank, probFit) and parameters (nElite optional)
-        # parentMode    : Parent selection method (name: Fitness) and parameters (alpha)
-        # cxMode        : Recombination method (name: simple,single or whole) and parameters (kwargs: alpha)
-        # mutationMode  : Mutation method (name: uniform, nonuniform) and parameters (kwargs: Pm);
-                            For nonuniform Pm =1; for uniform Pm set to ~0.05 and applied gene-wise
-        # fitness       : How to measure fitness type is either ‘PV’ or ‘Func’ and name is the either the PV or function name to be used
-        # nPop          : Number of individuals in population
-        # initPop       : Initial population; if None, will create one
-        # OM            : Turn on Observer Mode –only set to True when using against epics motors/fitness function
-        '''
 
         self.motors = motors
         self.generation = 0
@@ -70,19 +130,16 @@ class GA4Beamline:
         if initPop is None:
             self.population = self._CreatePop()
         else:
-            #Assign provided population.
             self.population = initPop
 
-        #self.parents = pd.DataFrame()
         self.parents = []
         self.children = pd.DataFrame(self._MakeDataFrameCat())
-        # will hold aveFitness, peakFitness, peakParameters for each generation
         self.fitHistory = pd.DataFrame({"aveFitness": [], "peakFitness": [], "peakParameters": []})
 
-        #print(f"children is:\n{self.children}\n")
-        #print(f"fitHistory is:\n{self.fitHistory}\n")
-
     def _CreatePop(self):
+        """
+        Initializes population if none was provided.
+        """
         categories = {}
 
         for motor in self.motors:
@@ -97,15 +154,19 @@ class GA4Beamline:
 
         population = pd.DataFrame(categories)
 
-        #print(population)
-
         return population
 
     def FirstGeneration(self):
+        """
+        Primes the algorithm.  MUST be run before NextGeneration().
+        """
         self._Measure(childrenOnly = False)
         self._SurvivorSel()
 
     def NextGeneration(self):
+        """
+        Progresses the algorithm.  NOTE: Continual calls and termination must be handled externally.
+        """
         self._ParentSel()
         self._Recombine()
         self._Mutate()
@@ -115,12 +176,10 @@ class GA4Beamline:
     #################### STAGES FUNCTIONS ####################
 
     def _SurvivorSel(self):
+        """
+        Determines which individuals are carried over into the next generation.
+        """
         tmp = None
-
-        #print("In survivor selection!")
-
-        #if nElite > 0: get to ranked individuals into new population
-        #For remainder just looking for nPop-nElite individuals
 
         if self.generation == 0:
             self.generation += 1
@@ -135,7 +194,6 @@ class GA4Beamline:
                     self.population = pd.concat([self.population, self.children.iloc[:(self.nPop - self.sSel["nElite"]), :]], ignore_index = True)
                     #print(f"Combined old and new.  public is:\n{self.population}")
                 else:
-                    #self.population = self.children
                     self.population = self.children.iloc[:self.nPop, :]
 
             elif self.sSel["name"] == "genitor":
@@ -143,41 +201,41 @@ class GA4Beamline:
 
                 #Use rankPop to set rank column of population + children
                 self._RankPop()
-                #self.population = top nPop of population + children
+
                 self.population = self.population.iloc[0:self.nPop, :]
 
-        #Set fitHistory
-        # will hold aveFitness, peakFitness, peakParameters for each generation
+        #Update fitHistory
         tmp = pd.DataFrame({"aveFitness": [self.population["fitness"].mean()],
                             "peakFitness": [self.population["fitness"].max()],
-                            "peakParameters": [self.population.iloc[0, : len(self.motors)].tolist()]}) #NOTE: NOT SURE WHAT IS SUPPOSED TO BE CONTAINED HERE
+                            "peakParameters": [self.population.iloc[0, : len(self.motors)].tolist()]})
         self.fitHistory = pd.concat([self.fitHistory, tmp], ignore_index = True)
 
-        #print(f"\nLength of population is: {len(self.population.index)}")
-        #print(self.fitHistory)
-
     def _ParentSel(self):
+        """
+        Selects individuals from the population to use to generate new individuals for the next generation.
+        """
         #Use rankPop to set rank column
         self._RankPop()
 
         if self.pSel["name"] == "probRank":
-            #use calcProb("rank") to set probability column
             self._CalcProb("rank")
 
         elif self.pSel["name"] == "probFit":
-            #use calcProb("fitness") to set probability column
             self._CalcProb("fitness")
 
-        #With probabilities set, create parent sets (lists of indexes to population?) using stochastic universal sampling (fig. 5.2 from Eiben & Smith 2 ed)
-        #List of parents should have nPop - nElite parents
         self.parents = self._StochasticUnivSampling(numParents = self.nPop - self.sSel["nElite"])
 
-        #print(f"nPop is: {self.nPop} Num elite is: {self.sSel['nElite']}")
         #print(f"parents has a length of: {len(self.parents)} and is:\n{self.parents}")
 
     def _StochasticUnivSampling(self, numParents):
-        #print("\nInside StochasticUnivSampling\n")
+        """
+        Selects parents from population using a Stochastic Universal Sampling algorithm.
 
+        Parameters
+        ----------
+        numParents : int
+            The number of individuals to add to the parent pool.
+        """
         cmlProb = self.population["probability"].cumsum().tolist()
         parents = []
 
@@ -202,10 +260,12 @@ class GA4Beamline:
 
 
     def _Recombine(self):
+        """
+        Generates new motor configurations ('children') from the individuals in parents.
+        """
         self.children = pd.DataFrame(self._MakeDataFrameCat())
         #print(f"children is:\n{self.children}")
 
-        #Need to create pairs of individuals from self.parents
         pairs = self._CreatePairs(self.parents)
 
         for p in range(len(pairs)):
@@ -214,7 +274,14 @@ class GA4Beamline:
         #print(f"\nchildren is:\n{self.children}")
 
     def _CreatePairs(self, parents):
-        #print("\nIn CreatePairs\n")
+        """
+        Creates a list of randomly selected pairs of parents.
+
+        Parameters
+        ----------
+        parents : list of indexes
+            The pool of potential parents in population.
+        """
         pairs = []
 
         for i in range(int(np.ceil(len(parents) / 2))):
@@ -225,7 +292,17 @@ class GA4Beamline:
         return pairs
 
     def _Recombination(self, parents, mode):
-        #Create 2 children from pair of parents
+        """
+        Generates 2 children from each pair of parents using the method specified in mode.
+
+        Parameters
+        ----------
+        parents : list of indexes
+            Contains 2 individuals from population that will be used to generate new motor configurations.
+        mode : dict
+            Specifies the method and parameters to use to generate the new motor configurations.
+
+        """
         alpha = mode["alpha"]
         parent1 = self.population.iloc[parents[0], :].tolist()
         parent2 = self.population.iloc[parents[1], :].tolist()
@@ -280,23 +357,39 @@ class GA4Beamline:
 
 
     def _Mutate(self):
+        """
+        Causes changes in the values of the individuals in children based on the method specified in mMode.
+        """
         for row in self.children.index:
             child = self.children.loc[row, :].tolist()
             self.children.loc[row, :] = self._Mutation(child, self.motors, self.mMode["name"])
 
     def _Mutation(self, child, motors, mode):
-        #print(f"child is:\n{child}")
+        """
+        Makes changes in the values of the child based on the method specified in mMode.
+
+        Parameters
+        ----------
+        child : list
+            The values of a particular row in the children data frame converted into a list.
+        motors : list of dict
+
+        """
+        #print(f"Before mutation, child is:\n{child}")
 
         mutatedValue = []
 
         for i in range(len(motors)):
             #print(f"Motor is: {motors[i]['name']}\nRange is: ({motors[i]['lo']}, {motors[i]['hi']})")
-            #if mode == "nonuniform":
+            #print(f"Original value is: {child[i]}")
             if mode == "gaussian":
-                #mutatedValue.append("random pick from gaussian centered on gene.value, with stdev of motor[j]['sigma']")
-                mutatedValue.append(random.gauss(child[i], motors[i]["sigma"]))
-                # to ensure that we are within the limits of the motor scipy.stats has a function truncnorm that should be
-                #   useful here so that we don’t have a pileup at the edges
+                #Set low end in terms of standard deviations from current value
+                a = (motors[i]['lo'] - child[i])/motors[i]['sigma']
+                #Set high end in terms of standard deviations from current value
+                b = (motors[i]['hi'] - child[i])/motors[i]['sigma']
+
+                mutatedValue.append(truncnorm.rvs(a, b, loc = child[i], scale = motors[i]['sigma'], size=1)[0])
+
             elif mode == "uniform":
                 mutatedValue.append(random.uniform(motors[i]["lo"], motors[i]["hi"]))
             #print(f"New mutated value is: {mutatedValue[i]}")
