@@ -59,8 +59,7 @@ class GA4Beamline():
     cxMode : dict
         Recombination method ('name') and parameters (kwargs: 'alpha').  See cxMode for valid parameters.
     mutationMode : dict
-        Mutation method ('name') and parameters (kwargs: 'Pm');
-            For nonuniform Pm =1; for uniform Pm set to ~0.05 and applied gene-wise.  See mMode for valid parameters.
+        Mutation method ('name').  See mMode for valid parameters.
     fitness : dict
         How to measure fitness. 'Type' is either ‘PV’ or ‘Func’ and 'name' is the either the PV or function name to be used.
             See fMode for valid parameters.
@@ -86,7 +85,7 @@ class GA4Beamline():
     cxMode : dict
         The method ('name') and parameters ('alpha') to use for recombination.
     mMode : dict
-        The method ('name') and parameters ('Pm') to use for recombination. #NOTE: NOT SURE ABOUT 'Pm' AS A PARAMETER
+        The method ('name') to use for recombination.
     obsMode : bool
         Determines whether to use oberver mode (True) or not.  Should use only when using epics motors/fitness function.
     fitness : dict
@@ -118,14 +117,13 @@ class GA4Beamline():
 
         self.motors = motors
         self.generation = 0
+        self.nPop = nPop
         self.sSel = self._VerifySurvivorMode(survivorMode)
         self.pSel = self._VerifyParentMode(parentMode)
         self.cxMode = self._VerifyCXMode(cxMode)
         self.mMode = self._VerifyMMode(mutationMode)
         self.obsMode = OM
         self.fitness = fitness
-
-        self.nPop = nPop
 
         if initPop is None:
             self.population = self._CreatePop()
@@ -495,8 +493,12 @@ class GA4Beamline():
                 valid = True
                 tmpDict["name"] = survivorMode["name"]
 
-                if "nElite" in survivorMode and survivorMode["nElite"] >= 0:
-                    tmpDict["nElite"] = survivorMode['nElite']
+                if "nElite" in survivorMode:
+                    if 0 <= survivorMode["nElite"] and survivorMode["nElite"] < self.nPop:
+                        tmpDict["nElite"] = survivorMode['nElite']
+                    else:
+                        raise ValueError(f"{survivorMode['nElite']} is greater than or equal to population size.")
+
                 else:
                     tmpDict["nElite"] = 0
 
