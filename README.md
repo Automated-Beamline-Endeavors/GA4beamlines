@@ -19,23 +19,48 @@ In genetic algorithms, a population of solutions to a problem are evolved in ord
 In this method, the **elite** (the best *n* members of the current population) are selected to carry over into the next generation's population.  The rest of population is replaced by the **children** (new individuals generated during recombination and mutation) to finish creating the new population of the next generation.
 
 ##### Method 2 - Genitor
-For this method, a number of children equal to the size of the current population, *p*, is generated.  Then, the individuals of the current population and the children are pooled together and ordered by their fitness.  The best *p* individuals of this pool are carried over to be the population of the next generation.
+For this method, a number of children equal to the size of the current population *p* is generated.  Then, the individuals of the current population and the children are pooled together and ordered by their fitness.  The best *p* individuals of this pool are carried over to be the population of the next generation.
 
 #### Parent
+The members of the population are ranked from *p* - 1 to 0 (0 being the worst) based on their fitness.  From there, one of the following methods is used to assign the probability of each individual being selected as a potential **parent** (one of two or more individuals used in recombination to generate a child).  Once the probabilities are determined, potential parents are selected from the population using **Stochastic Universal Sampling** (see [1]).
 ##### Method 1 - Rank-Based Probability
+This method calculates the probability of selecting an individual as a parent using the following formula:
 
+<p style = "text-align: center;">(2 - s) / p + 2 * rank * (s - 1) / p / (p - 1)</p>
 
+Where 1 < *s* <= 2 and *rank* is the rank of the individual.  *s* is used to determine the base chance of selecting an individual regardless of their rank.
 ##### Method 2 - Fitness-Based Probability
+This method calculates the probability of selecting an individual as a parent by first calculating the cumulative fitness of the population and then dividing each individual's fitness by the cumulative fitness.
 
 
 ### Variation
 #### Recombination
-##### Method 1
-##### Method 2
+Takes pairs of parents and an  *alpha* (0.0 <= *alpha* <= 1.0, which is the percentage of contribution from each parent) and uses one of the following methods to generate two new children:
+##### Method 1 - Single Arithmetic Recombination
+A position within the parents *k* is randomly selected.  The first child is equal to the first parent, except the value at position *k* is:
+
+<p style = "text-align: center;"> parent1's value at k * (1 - alpha) + parent2's value at k * alpha</p>
+
+The second child is calculated in a similar manner, only the parents are reversed.
+##### Method 2 - Simple Arithmetic Recombination
+A position within the parents *k* is randomly selected.  The first 0 - *k* values of child one is equal to the same values in the same positions of the first parent, except the values at position *k* and after are :
+
+<p style = "text-align: center;"> parent1's values from k to the end * (1 - alpha) + parent2's values from k to the end * alpha</p>
+
+The second child is calculated in a similar manner, only the parents are reversed.
+##### Method 3 - Whole Arithmetic Recombination
+The first child's values would be calculated by:
+
+<p style = "text-align: center;"> parent1's values * (1 - alpha) + parent2's values * alpha</p>
+
+The second child is calculated in a similar manner, only the parents are reversed.  In the case that *alpha* is 0.5, the values of both children would be the average of the parents.
 
 #### Mutation
-##### Method 1
-##### Method 2
+Mutation occurs in the *children* produced from recombination.
+##### Method 1 - Uniform
+For each value in the child, a random value within a previously specified range is selected from a <ins>uniform distribution</ins>.
+##### Method 2 - Gaussian
+For each value in the child, a random value is selected from a <ins>gaussian distribution</ins> centered on the current value with a previously specified sigma range.
 
 ## Pseudocode
 ### Evolution
@@ -44,6 +69,7 @@ For this method, a number of children equal to the size of the current populatio
 
 ## Additions
 ### Observer Mode
+
 
 ## Testing
 ### Ackley Function
