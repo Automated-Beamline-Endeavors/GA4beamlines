@@ -69,16 +69,19 @@ For each value in the child, a random value is selected from a <ins>gaussian dis
 
 ## Additions
 ### Observer Mode
-
+Intended for use when working with physical beamlines.  When enabled, program will monitor the quality of the beam (based on specified criteria) as it transitions between beamline configurations within the population.  If a configuration better than the previous one is found during the transition, the previous configuration is replaced by the new one.
 
 ## Testing
 ### Ackley Function
 ### Results
+- While both the **Age + Elitism** and **Genitor** methods of survivor selection are capable of finding satisfactory solutions, genitor generally can find a solution in less generations than age + elitism.
+- **Uniform** mutation causes the algorithm to almost never generate a satisfactory solution (fitness >= 0.9) for all method configurations.
 #### General objective function
 #### Surrogate beamline
 
 ## Future work
 ### Steady-state
+Another method of survivor selection.  Unlike the current methods, which can potentially generate an entirely new population each generation, this method prioritizes making small changes to the population over time.  For each generation, the *n* worst individuals are replaced with children and the rest of the population is carried over to the next generation.
 ### 2-D or image-base objective
 ### Multi-objective
 
