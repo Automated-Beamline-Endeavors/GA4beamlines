@@ -12,8 +12,14 @@ Genetic algorithm is a metaheuristic designed to mimic aspects of natural select
 In genetic algorithms, a population of solutions to a problem are evolved in order to find an optimal solution to the problem.  In this case, the problem is the arrangement of optical elements in a beamline to produce the optimal downstream beam parameter (either intensity or beam shape). The proposed solutions are evaluated and survivors selected based on fitness or age. From the survivors parents are selected and recombined to produce children.  These children undergo mutation and added to the pool of individuals subject to survivor selection. This completes one generation and the process continues until a “good” enough solution is found or the maximum number of generations have been carried out.
 
 ### Population:
+A collection of potential solutions, called **individuals**.  Maintains the same size across generations, though the individuals within change.
+### Individual:
+Drawing from its influence in biology, individuals have a **chromosome** which contains a series of values called **genes**
+### Gene:
+For this problem, each gene of the chromosome is a motor position within the beamline.
 
 ### Selection
+There are two types of selection in this algorithm: **survivor** and **parent**.  Survivor selection determines which individuals will carry over into the next generation.  Parent selection decides which individuals will potentially contribute toward creating the next generation of individuals.
 #### Survivor
 ##### Method 1 - Age + Elitism
 In this method, the **elite** (the best *n* members of the current population) are selected to carry over into the next generation's population.  The rest of population is replaced by the **children** (new individuals generated during recombination and mutation) to finish creating the new population of the next generation.
@@ -28,12 +34,13 @@ This method calculates the probability of selecting an individual as a parent us
 
 <p style = "text-align: center;">(2 - s) / p + 2 * rank * (s - 1) / p / (p - 1)</p>
 
-Where 1 < *s* <= 2 and *rank* is the rank of the individual.  *s* is used to determine the base chance of selecting an individual regardless of their rank.
+Where 1 < *s* <= 2 and *rank* is the rank of the individual.  *s* is used to determine the base chance of selecting an individual regardless of their rank.  As the value of s approaches 1, the probability of selecting an individual becomes the same for all individuals in the population.  As the value of s approaches 2, rank has a larger impact on the probability and the probability of selecting the worst individual (rank of 0) becomes 0.
 ##### Method 2 - Fitness-Based Probability
 This method calculates the probability of selecting an individual as a parent by first calculating the cumulative fitness of the population and then dividing each individual's fitness by the cumulative fitness.
 
 
 ### Variation
+Variation is what enables the population to explore the space of possible solutions.  There are two types of variation in this algorithm: **Recombination** and **Mutation**.  Recombination generates children from existing individuals to potentially become part of the next generation.  Mutation is applied to the children and serves as a way to keep the population from being overtaken by a few, well-adapted individuals.
 #### Recombination
 Takes pairs of parents and an  *alpha* (0.0 <= *alpha* <= 1.0, which is the percentage of contribution from each parent) and uses one of the following methods to generate two new children:
 ##### Method 1 - Single Arithmetic Recombination
