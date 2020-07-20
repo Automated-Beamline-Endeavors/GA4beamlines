@@ -11,7 +11,8 @@ from scipy.stats import truncnorm
 #################### VARIABLES AND CONSTANTS DEFINITIONS ####################
 #Valid survivor selection methods
 sMode =     [{"name": "age", "nElite": 0},
-             {"name": "genitor"}]
+             {"name": "genitor"},
+             {"name": "steady", "nChild": 2}]
 #Valid parent selection methods
 pMode =     [{"name": "probRank", "s": 1.5},
              {"name": "probFit"}]
@@ -283,7 +284,7 @@ class GA4Beamline():
         pairs = []
 
         for i in range(int(np.ceil(len(parents) / 2))):
-            pairs.append(random.choices(parents, k = 2))
+            pairs.append(random.sample(parents, 2))
 
         #print(f"The pairs are:\n{pairs}")
 
@@ -497,7 +498,13 @@ class GA4Beamline():
                     if 0 <= survivorMode["nElite"] and survivorMode["nElite"] < self.nPop:
                         tmpDict["nElite"] = survivorMode['nElite']
                     else:
-                        raise ValueError(f"{survivorMode['nElite']} is greater than or equal to population size.")
+                        raise ValueError(f"{survivorMode['nElite']} is out of range [0, population size).")
+
+                elif "nChild" in survivorMode:
+                    if 0 < survivorMode["nChild"] and survivorMode["nChild"] < self.nPop:
+                        tmpDict["nElite"] = self.nPop - survivorMode['nChild']
+                    else:
+                        raise ValueError(f"{survivorMode['nChild']} is out of range (0, population size).")
 
                 else:
                     tmpDict["nElite"] = 0
